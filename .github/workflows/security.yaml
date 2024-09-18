@@ -1,0 +1,14 @@
+name: Security Scan
+
+on:
+    workflow_dispatch:
+    pull_request:
+    push:
+        branches:
+        - main
+
+jobs:
+    security:
+        name: OSS Security SAST
+        uses: RobloxResearch/security-workflows/.github/workflows/oss-security-sast.yaml@main
+        secrets: inherit
