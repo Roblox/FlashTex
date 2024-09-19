@@ -293,7 +293,7 @@ def setup_renderers(tsdf, use_pbr=False, bg_color=(0.0, 0.0, 0.0), device='cuda'
 def direct_optimization_nvdiffrast(args, mesh_dict, target_images, target_masks, preloaded_models, progress_callback=None):
     textured_mesh = mesh_dict['mesh']
     
-    # fixme writing temporary mesh
+    # writing temporary mesh
     output_mesh_basename = 'output_mesh.obj'
     output_texture_basename = 'tex_combined.png'
     tmp_mesh_dir = tempfile.mkdtemp(prefix='tmp_mesh_')
@@ -354,8 +354,8 @@ def direct_optimization_nvdiffrast(args, mesh_dict, target_images, target_masks,
                                                    negative_prompt=args.n_prompt, 
                                                    num_iters=iter_num, 
                                                    textured_mesh=textured_mesh, 
-                                                   fixed_target_images=F.interpolate(target_images, size=(512, 512), mode='bilinear'), # fixme
-                                                   fixed_target_masks=F.interpolate(target_masks, size=(512, 512), mode='bilinear'), # fixme
+                                                   fixed_target_images=F.interpolate(target_images, size=(512, 512), mode='bilinear'), 
+                                                   fixed_target_masks=F.interpolate(target_masks, size=(512, 512), mode='bilinear'), 
                                                    fixed_target_azim=mesh_dict['azim'], 
                                                    fixed_target_elev=mesh_dict['elev'],
                                                    progress_callback=progress_callback)
