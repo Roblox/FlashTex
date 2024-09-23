@@ -53,8 +53,6 @@ def write_360_video(mesh:Meshes, output_filename:str, walkaround_y:float, output
         frame_filename = os.path.join(temp_dir, f'walk_{str(frame_idx).zfill(4)}.png')
         torchvision.utils.save_image(mesh_images, frame_filename)
 
-    # os.system(f"ffmpeg -y -r {num_frames} -i {temp_dir}/walk_%04d.png -c:v libx264 -vf fps={num_frames} -pix_fmt yuv420p {output_filename}")
-
     output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '.gif'
     os.system(f"convert -delay 30 -loop 0 {temp_dir}/walk_*.png {output_gif_filename}")
     
@@ -71,9 +69,6 @@ def write_360_video_diffrast(renderer, output_filename, resolution=512, device='
         R, T = look_at_view_transform(dist=camera_dist, elev=elev, azim=frame_t * -360.0)
         cameras = FoVPerspectiveCameras(device=device, R=R, T=T, fov=fov)
         
-        # c2w = cameras.get_world_to_view_transform().get_matrix().contiguous().to(device)  # Pytorch3d stores transposed matrix
-        
-        # print(cameras.get_world_to_view_transform().inverse().get_matrix().transpose(1,2).contiguous())
         c2w = cameras.get_world_to_view_transform().inverse().get_matrix().transpose(1,2).contiguous().to(device)
         
         camera_positions = cameras.get_camera_center().to(device)
@@ -86,10 +81,7 @@ def write_360_video_diffrast(renderer, output_filename, resolution=512, device='
         focal = fov_to_focal(fov, resolution)
         directions = get_ray_directions(resolution, resolution, focal).to(device)
         
-        rays_o, rays_d = get_rays(directions, c2w)
-        # print(c2w, rays_o[0], camera_positions[0])
-        # print(((rays_o - camera_positions) ** 2).mean())
-        
+        rays_o, rays_d = get_rays(directions, c2w)        
 
         with torch.no_grad():
             out = renderer(mvp_mtx=mvp_mtx, 
@@ -99,74 +91,14 @@ def write_360_video_diffrast(renderer, output_filename, resolution=512, device='
                             c2w=c2w, rays_d=rays_d, env_bg=True, env_light=env_light,
                             mean_albedo_diffuse=False)
 
-
-        # out['comp_normal_viewspace'] = 1 - out['comp_normal_viewspace']
             
         frame_filename = os.path.join(temp_dir, f'walk_rgb_{str(frame_idx).zfill(4)}.png')
         torchvision.utils.save_image(out['comp_rgb'].permute(0,3,1,2), frame_filename)
         frame_filename = os.path.join(temp_dir, f'walk_normal_{str(frame_idx).zfill(4)}.png')
-        torchvision.utils.save_image(out['comp_normal_viewspace'].permute(0,3,1,2), frame_filename)
-        
-        # frame_filename = os.path.join(temp_dir, f'walk_normalR_{str(frame_idx).zfill(4)}.png')
-        # torchvision.utils.save_image(out['comp_normal_viewspace'].permute(0,3,1,2)[:,0:1], frame_filename)
-        # frame_filename = os.path.join(temp_dir, f'walk_normalG_{str(frame_idx).zfill(4)}.png')
-        # torchvision.utils.save_image(out['comp_normal_viewspace'].permute(0,3,1,2)[:,1:2], frame_filename)
-        # frame_filename = os.path.join(temp_dir, f'walk_normalB_{str(frame_idx).zfill(4)}.png')
-        # torchvision.utils.save_image(out['comp_normal_viewspace'].permute(0,3,1,2)[:,2:3], frame_filename)
-        
-        if 'comp_rgb_diffuse' in out:
-            frame_filename = os.path.join(temp_dir, f'walk_diffuse_{str(frame_idx).zfill(4)}.png')
-            torchvision.utils.save_image(out['comp_rgb_diffuse'].permute(0,3,1,2), frame_filename)
-            frame_filename = os.path.join(temp_dir, f'walk_specular_{str(frame_idx).zfill(4)}.png')
-            torchvision.utils.save_image(out['comp_rgb_specular'].permute(0,3,1,2), frame_filename)
-
-            # frame_filename = os.path.join(temp_dir, f'walk_mean_albedo_{str(frame_idx).zfill(4)}.png')
-            # torchvision.utils.save_image(out['comp_rgb_mean_albedo'].permute(0,3,1,2), frame_filename)
-
-            frame_filename = os.path.join(temp_dir, f'walk_albedo_{str(frame_idx).zfill(4)}.png')
-            torchvision.utils.save_image(out['comp_albedo'].permute(0,3,1,2), frame_filename)
-            frame_filename = os.path.join(temp_dir, f'walk_roughness_{str(frame_idx).zfill(4)}.png')
-            torchvision.utils.save_image(out['comp_roughness'].permute(0,3,1,2), frame_filename)
-            frame_filename = os.path.join(temp_dir, f'walk_metallic_{str(frame_idx).zfill(4)}.png')
-            torchvision.utils.save_image(out['comp_metallic'].permute(0,3,1,2), frame_filename)
-        
-        if 'comp_tangent' in out:
-            frame_filename = os.path.join(temp_dir, f'walk_tangent_{str(frame_idx).zfill(4)}.png')
-            torchvision.utils.save_image(out['comp_tangent'].permute(0,3,1,2), frame_filename)
-        
-
-    # os.system(f"ffmpeg -y -r {num_frames} -i {temp_dir}/walk_%04d.png -c:v libx264 -vf fps={num_frames} -pix_fmt yuv420p {output_filename}")
+        torchvision.utils.save_image(out['comp_normal_viewspace'].permute(0,3,1,2), frame_filename)     
 
     output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_rgb.gif'
     os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_rgb_*.png {output_filename}")
-    # output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_normal.gif'
-    # os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_normal_*.png {output_gif_filename}")
-    # output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_normalR.gif'
-    # os.system(f"convert -delay 30 -loop 0 {temp_dir}/walk_normalR_*.png {output_gif_filename}")
-    # output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_normalG.gif'
-    # os.system(f"convert -delay 30 -loop 0 {temp_dir}/walk_normalG_*.png {output_gif_filename}")
-    # output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_normalB.gif'
-    # os.system(f"convert -delay 30 -loop 0 {temp_dir}/walk_normalB_*.png {output_gif_filename}")
-    
-    if 'comp_rgb_diffuse' in out:
-        output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_diffuse.gif'
-        os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_diffuse_*.png {output_gif_filename}")
-        output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_specular.gif'
-        os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_specular_*.png {output_gif_filename}")
-
-        # output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_mean_albedo.gif'
-        # os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_mean_albedo_*.png {output_gif_filename}")
-
-        output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_albedo.gif'
-        os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_albedo_*.png {output_gif_filename}")
-        output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_roughness.gif'
-        os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_roughness_*.png {output_gif_filename}")
-        output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_metallic.gif'
-        os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_metallic_*.png {output_gif_filename}")
-    
-    if 'comp_tangent' in out:
-        output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_tangent.gif'
-        os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_tangent_*.png {output_gif_filename}")
     
     shutil.rmtree(temp_dir)
 

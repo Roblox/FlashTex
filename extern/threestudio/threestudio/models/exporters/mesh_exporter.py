@@ -129,20 +129,16 @@ class MeshExporter(Exporter):
 
             if "albedo" in mat_out:
                 params["map_Kd"] = uv_padding(mat_out["albedo"])
-                threestudio.info(params["map_Kd"].shape)
             else:
                 threestudio.warn(
                     "save_texture is True but no albedo texture found, using default white texture"
                 )
             if "metallic" in mat_out:
                 params["map_Pm"] = uv_padding(mat_out["metallic"]).squeeze(-1)
-                threestudio.info(params["map_Pm"].shape)
             if "roughness" in mat_out:
                 params["map_Pr"] = uv_padding(mat_out["roughness"]).squeeze(-1)
-                threestudio.info(params["map_Pr"].shape)
             if "bump" in mat_out:
                 params["map_Bump"] = uv_padding(mat_out["bump"])
-                threestudio.info(params["map_Bump"].shape)
             # TODO: map_Ks
         return [
             ExporterOutput(

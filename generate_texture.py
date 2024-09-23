@@ -66,6 +66,7 @@ def parse_args(arglist=None):
                         default='./output', help='Path to output directory')
     parser.add_argument('--production', action='store_true', help='Run in production mode, skipping debug outputs')
     parser.add_argument('--model_id', type=str, default='Lykon/DreamShaper', help='Diffusers model to use for generation')
+    parser.add_argument('--controlnet_name', type=str, default='', help='ControlNet model to use for generation')
     parser.add_argument('--pretrained_dir', type=str, help='Directory containing pretrained weights for models')
     parser.add_argument('--distilled_encoder', type=str, default='load/encoder_resnet4.pth', help='Disilled encoder checkpoint')
     parser.add_argument('--image_resolution', type=int, default=512, help='Image resolution')
@@ -100,9 +101,10 @@ def parse_args(arglist=None):
     parser.add_argument('--device', type=str, default="cuda", help='Device to use (cpu or cuda), defaults to cuda when available.')
     parser.add_argument('--guidance_scale', type=float, default=50.0, help='Guidance Scale')
     parser.add_argument('--cond_strength', type=float, default=1.0, help='Condtioning Strength for ControlNet')
-    parser.add_argument('--guidance_sds', type=str, default="SDS_sd")
+    parser.add_argument('--guidance_sds', type=str, default="SDS_sd", help='Choose from [SDS_sd, SDS_LightControlNet]')
     parser.add_argument('--no_tqdm', action='store_true', help='No tqdm logging')
     parser.add_argument('--SDS_camera_dist', type=float, default=5.0)
+    parser.add_argument('--pbr_material', action='store_true', help='Use PBR Material.')
     args = parser.parse_args(args=arglist)
     return args
 
@@ -193,10 +195,10 @@ def get_mesh_dict_and_view_strings(args, use_textures=False):
 
 
 def generate_avatar_image(args, mesh_dict, view_strings, use_view_prompt, prompt_masking_style, is_character_sheet,
-                          preloaded_models, input_images, output_name:str=""):
+                         input_images, output_name:str=""):
     output_image_name = f'{args.output_dir}/{output_name}'
     
-    avatar_image_generator = AvatarImageGenerator(args, preloaded_models, args.device)
+    avatar_image_generator = AvatarImageGenerator(args, preloaded_models=None, device=args.device)
     generated_outputs = avatar_image_generator(
         mesh_dict,
         view_strings=view_strings,
@@ -222,7 +224,7 @@ def interpolate_image(image0, image1, t):
 # Generate character sheet with multiple views of the mesh in one image.
 # This helps encourage multiview consistency.
 #
-def generate_initial_character_sheet(args, mesh_dict, view_strings, preloaded_models):    
+def generate_initial_character_sheet(args, mesh_dict, view_strings):    
     # Add character_sheet_noise
     if args.character_sheet_noise > 0.0:
         noise_mask = (mesh_dict['mesh_depths'] > 0.05).float()
@@ -236,51 +238,18 @@ def generate_initial_character_sheet(args, mesh_dict, view_strings, preloaded_mo
         use_view_prompt=args.skip_character_sheet,
         prompt_masking_style=args.prompt_masking_style,
         is_character_sheet=not args.skip_character_sheet,
-        preloaded_models=preloaded_models,
         input_images=mesh_dict['mesh_images'],
         output_name='depth2image.png',
     )
 
 
-def save_results(args, mesh_dict, texture_maps, textured_mesh, valid_masks, seams=None, save_360:bool=True):
-    def compute_uv_confidence_mask(seams, valid_masks):
-        seams = seams.permute(0, 3, 1, 2)
-        valid_masks = valid_masks.permute(0, 3, 1, 2)
-        return (1.0 - seams) * valid_masks
-
-    def save_uv_confidence_mask(uv_confidence_mask, output_dir):
-        torchvision.utils.save_image(uv_confidence_mask, f'{output_dir}/uv_confidence_mask.png')
-
-    def save_textured_mesh(textured_mesh, output_dir, output_texture_basename, mesh_center, mesh_scale):
-        output_mesh_filename = f'{output_dir}/{output_mesh_basename}'
-                
-        # Transform mesh back to original center/scale before saving it
-        textured_mesh = textured_mesh.clone()
-        textured_mesh.scale_verts_(1.0 / mesh_scale)
-        textured_mesh.offset_verts_(mesh_center.expand(textured_mesh.verts_padded().size(1), -1).to(textured_mesh.device))
-        
-        write_obj_with_texture(output_mesh_filename, output_texture_basename, textured_mesh)
-
-    def save_360_video(textured_mesh, output_dir, walkaround_y, gif_resolution):
-        write_360_video(textured_mesh, output_filename=f'{output_dir}/video360.mp4', walkaround_y=walkaround_y, output_resolution=gif_resolution)
-
-    with ThreadPoolExecutor() as executor:
-        output_mesh_basename = 'output_mesh.obj'
-        output_texture_basename = 'tex_combined.png'
-
-        executor.submit(save_textured_mesh, textured_mesh, args.output_dir, output_texture_basename, mesh_dict['center'], mesh_dict['scale'])
-
-        if save_360:
-            executor.submit(save_360_video, textured_mesh, args.output_dir, args.walkaround_y, args.gif_resolution)
-            if seams is not None:
-                uv_confidence_mask = executor.submit(compute_uv_confidence_mask, seams, valid_masks)
-                executor.submit(save_uv_confidence_mask, uv_confidence_mask.result(), args.output_dir)
-
-
 def setup_renderers(tsdf, use_pbr=False, bg_color=(0.0, 0.0, 0.0), device='cuda', bg_random_p=0.5):
 
     # PBR or albedo only
-    material = NoMaterial({}).to(device)
+    material = PBRMaterial({
+        "min_albedo": 0.03,
+        "max_albedo": 0.8,
+    }).to(device) if use_pbr else NoMaterial({}).to(device)
 
     # Setup renderer for optimization and testing
     bg = SolidColorBackground(dict(color=bg_color, random_aug=False, hls_color=True, s_range=(0.0, 0.01), random_aug_prob=bg_random_p)).to(device)
@@ -290,7 +259,7 @@ def setup_renderers(tsdf, use_pbr=False, bg_color=(0.0, 0.0, 0.0), device='cuda'
     return dict(optimization=optimization_renderer, testing=test_renderer)
 
 
-def direct_optimization_nvdiffrast(args, mesh_dict, target_images, target_masks, preloaded_models, progress_callback=None):
+def direct_optimization_nvdiffrast(args, mesh_dict, target_images, target_masks, progress_callback=None):
     textured_mesh = mesh_dict['mesh']
     
     # writing temporary mesh
@@ -301,45 +270,27 @@ def direct_optimization_nvdiffrast(args, mesh_dict, target_images, target_masks,
     print('tmp_mesh_filename', tmp_mesh_filename)
     write_obj_with_texture(tmp_mesh_filename, output_texture_basename, textured_mesh)
     
-    fix_geometry = True
-    skip_init_texture = True
-    init_iter_num = 100
     iter_num = args.num_sds_iterations
-    bg_random_p = 1.0
     guidance = args.guidance_sds
-    lambda_recon_reg = 1000.0
-    grad_clip = 0.1
         
-    implicit3d = setup_geometry3d(mesh_file=tmp_mesh_filename, fix_geometry=fix_geometry, geometry='custom_mesh', centering='none', scaling='none', material='no_material')
+    implicit3d = setup_geometry3d(mesh_file=tmp_mesh_filename, geometry='custom_mesh', centering='none', scaling='none', material='pbr' if args.pbr_material else 'no_material')
     
     # Setup optimization and testing renderers for implicit representations
-    renderers = setup_renderers(implicit3d, use_pbr=False, bg_random_p=bg_random_p)
+    renderers = setup_renderers(implicit3d, use_pbr=args.pbr_material, bg_random_p=1.0)
 
     optimization_output_dir = os.path.join(args.output_dir, 'optimization')
     os.makedirs(optimization_output_dir, exist_ok=True)
         
-    clip_tokenizer = None
-    clip_text_model = None
-    unet = None
-    for key in preloaded_models.keys():
-        if key.startswith('depth2image'):
-            depth2image_model = preloaded_models[key].pipe
-            clip_tokenizer = depth2image_model.tokenizer
-            clip_text_model = depth2image_model.text_encoder
-            unet = depth2image_model.unet                  
-            break
-        
-    optimizer3d = Optimizer3D(tsdf=implicit3d, renderers=renderers, 
+    optimizer3d = Optimizer3D(tsdf=implicit3d, renderers=renderers,
+                              model_name=args.model_id,
+                              controlnet_name=args.controlnet_name,
                               output_dir=optimization_output_dir,
                               distilled_encoder=args.distilled_encoder,
-                              lambda_recon_reg=lambda_recon_reg,
-                              grad_clip=grad_clip,
+                              lambda_recon_reg=1000.0,
+                              grad_clip=0.1,
                               save_img=0 if args.production else 100,
                               save_video=0 if args.production else 1000,
-                              fix_geometry=fix_geometry,
-                              clip_tokenizer=clip_tokenizer,
-                              clip_text_model=clip_text_model,
-                              unet=unet,
+                              fix_geometry=True,
                               pretrained_dir=args.pretrained_dir,
                               guidance=guidance,
                               guidance_scale=args.guidance_scale,
@@ -347,14 +298,11 @@ def direct_optimization_nvdiffrast(args, mesh_dict, target_images, target_masks,
                               no_tqdm=args.no_tqdm,
                               camera_dist=args.SDS_camera_dist)
     
-    implicit3d = implicit3d if skip_init_texture else \
-                 optimizer3d.optimize_with_mesh(textured_mesh=textured_mesh, num_iters=init_iter_num)
-    
     implicit3d = optimizer3d.optimize_with_prompts(prompt=args.prompt, 
                                                    negative_prompt=args.n_prompt, 
                                                    num_iters=iter_num, 
                                                    textured_mesh=textured_mesh, 
-                                                   fixed_target_images=F.interpolate(target_images, size=(512, 512), mode='bilinear'), 
+                                                   fixed_target_images=target_images, 
                                                    fixed_target_masks=F.interpolate(target_masks, size=(512, 512), mode='bilinear'), 
                                                    fixed_target_azim=mesh_dict['azim'], 
                                                    fixed_target_elev=mesh_dict['elev'],
@@ -368,37 +316,32 @@ def direct_optimization_nvdiffrast(args, mesh_dict, target_images, target_masks,
         shutil.copyfile(f'{optimization_output_dir}/{guidance}_final_rgb.gif', f'{args.output_dir}/video360.gif')
     
     optimizer3d.export_mesh(optimization_output_dir, textured_mesh.textures.verts_uvs_padded().squeeze(0), textured_mesh.textures.faces_uvs_padded().squeeze(0))
-    shutil.copyfile(f'{optimization_output_dir}/texture_kd.png', f'{args.output_dir}/tex_combined.png')
-    
-    # Use the texture map exported from threestudio
-    texture_map = torch.from_numpy(np.array(Image.open(f'{args.output_dir}/tex_combined.png')).astype(np.float32) / 255.0).permute(2,0,1).unsqueeze(0).to(args.device)
-    
-    textured_mesh.textures = TexturesUV(verts_uvs=textured_mesh.textures.verts_uvs_padded().to(args.device), faces_uvs=textured_mesh.textures.faces_uvs_padded().to(args.device), maps=texture_map)
-    
-    return texture_map, textured_mesh
+    shutil.copyfile(f'{optimization_output_dir}/texture_kd.png', f'{args.output_dir}/texture_kd.png')
+    shutil.copyfile(f'{optimization_output_dir}/output_mesh.mtl', f'{args.output_dir}/output_mesh.mtl')
+    shutil.copyfile(f'{optimization_output_dir}/output_mesh.obj', f'{args.output_dir}/output_mesh.obj')
+
+    if args.pbr_material:
+        shutil.copyfile(f'{optimization_output_dir}/texture_metallic.png', f'{args.output_dir}/texture_metallic.png')
+        shutil.copyfile(f'{optimization_output_dir}/texture_roughness.png', f'{args.output_dir}/texture_roughness.png')
+        shutil.copyfile(f'{optimization_output_dir}/texture_nrm.png', f'{args.output_dir}/texture_nrm.png')
 
     
-def main(args, preloaded_models={}, progress_callback=None):
+def main(args, progress_callback=None):
     args = setup(args)
     
     mesh_dict, view_strings = get_mesh_dict_and_view_strings(args, use_textures=args.refine)
     
-    output_images, diffusion_noise_init = generate_initial_character_sheet(args, mesh_dict, view_strings, preloaded_models)
-    
-    # This is used for preview and moderation so save it even when production==True
-    torchvision.utils.save_image(output_images[0:1], f'{args.output_dir}/depth2image_front.png', padding=0)
+    if args.guidance_sds == 'SDS_sd':
+        output_images, diffusion_noise_init = generate_initial_character_sheet(args, mesh_dict, view_strings)
+        output_images = F.interpolate(output_images, size=(512, 512), mode='bilinear')
+        torchvision.utils.save_image(output_images[0:1], f'{args.output_dir}/depth2image_front.png', padding=0)
+    else:
+        output_images = None
     
     if progress_callback is not None:
-        progress_callback(output_images[0:1])
-        
-        texture_maps, textured_mesh = direct_optimization_nvdiffrast(args, mesh_dict, output_images, mesh_dict['mesh_masks'], preloaded_models, progress_callback=progress_callback)
-        valid_masks = torch.ones_like(texture_maps)
-        seams = None# torch.ones_like(texture_maps)
-            
-    save_results(args, mesh_dict, texture_maps, textured_mesh, valid_masks, seams, save_360=False)
-        
+        direct_optimization_nvdiffrast(args, mesh_dict, output_images, mesh_dict['mesh_masks'], progress_callback=progress_callback)
 
-
+        
 if __name__ == '__main__':
     args = parse_args()
     

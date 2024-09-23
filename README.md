@@ -4,7 +4,7 @@
 
 [**Project**](https://flashtex.github.io/) | [**Paper**](https://arxiv.org/abs/2402.13251)
 
-ECCV 2024
+ECCV 2024, Oral
 
  [Kangle Deng](https://dunbar12138.github.io/),
  [Timothy Omernick](),
@@ -24,11 +24,11 @@ Manually creating textures for 3D meshes is time-consuming, even for expert visu
 
 ### Dependencies
 
-Our envirionment has been tested on linux, pytorch 2.0, CUDA 11.8.
+Our environment has been tested on linux, pytorch 2.0, CUDA 11.8.
 
 1. Install pytorch and CUDA.
 2. Install pytorch3d following [link](https://github.com/facebookresearch/pytorch3d/blob/main/INSTALL.md).
-3. Install requirements:
+3. Install other requirements:
 ```
 pip install -r requirements.txt
 ```
@@ -50,20 +50,21 @@ Explanation for some primary parameters:
 - `rotation_y`: Rotate the mesh along y (up) axis. We set this parameter as the example mesh is initially back-facing.
 - `production`: Use this flag to skip saving intermediate results and final gifs to save running time.
 
-Please refer to `generate_texture.py` for other parameters. The script will export the textured mesh and visualizations to `<output>` directory. Specifically, `output_mesh.obj` is the normalized mesh, `output_mesh.mtl` and `tex_combined.png` are exported textures. 
+Please refer to `generate_texture.py` for other parameters. The script will export the textured mesh and visualizations to `<output>` directory. Specifically, `output_mesh.obj` is the normalized mesh, `output_mesh.mtl` and `texture_kd.png` are exported textures. 
 
 ### Inference with LightControlNet
 
-#### Download pre-trained weights (coming soon)
+#### Run texture generation with pre-trained lightcontrolnet
 
-#### Run texture generation
+We have uploaded our pre-trained lightcontrolnet weights to huggingface at ([link](https://huggingface.co/kangled/lightcontrolnet/)). With the `controlnet_name` specified as `kangled/lightcontrolnet`, the script will automatically download the weights. 
 
 ```
 python generate_texture.py --input_mesh ./load/examples/sneaker.obj \ 
-                            --output ./output/sneaker/ \
+                           --output ./output/sneaker/ \
                            --prompt "Sneaker that seems to be constructed from graffiti art, detailed, hd" \
                            --rotation_y 180 \
-                           --guidance_sds LightControlNet
+                           --guidance_sds LightControlNet --pbr_material \
+                           --controlnet_name kangled/lightcontrolnet
 ```
 
 ---
@@ -72,7 +73,8 @@ python generate_texture.py --input_mesh ./load/examples/sneaker.obj \
 
 You can also train your own LightControlNet with your own prepared data. We provide the instructions below.
 
-#### Dataset preparation
+
+#### Install Blender
 
 You first need to download and Install Blender:
 ```
@@ -82,7 +84,9 @@ rm blender-3.2.2-linux-x64.tar.xz
 export PATH=$PATH:path_to_blender/blender-3.2.2-linux-x64/
 ```
 
-To render control images, we provide a blender script and example usage below:
+#### Render training data
+
+To render control images for a single object, we provide a blender script and example usage below:
 ```
 blender -b -P tools/blender_script.py -- \
             --object_path {obj_path} \
@@ -91,6 +95,27 @@ blender -b -P tools/blender_script.py -- \
             --engine CYCLES \
 ```
 
+We provide an example script `tools/distributed_render_objaverse.py` to distribute the blender rendering process of staffpicked subset in Objaverse as rendering the whole dataset takes a lot of time. Please change the corresponding data and rendering directory before running it.
+
+#### Build ControlNet Training Set
+
+Once the images are rendered, the dataset can be built by running `tools/make_controlnet_dataset_optim.py`. This script will create a list `train.jsonl` in the rendered directory indicating the metadata.
+After running the script, copy `tools/objaverse_render.py` to your data root dir to make it a readable dataset. Please change the corresponding data and rendering directory accordingly.
+
+Example file tree:
+```
+rendered_data
+├── staffpicked
+│   ├── 00200996b8f34f55a2dd2f44d316d107 # Rendered Object
+│   │   ├── 000_rgb.png
+│   │   └── ...
+│   ├── ...        
+│   └── train.jsonl
+├── subsetB
+│   └── ...
+├── ...
+└── objaverse_render.py
+```
 
 #### Training
 

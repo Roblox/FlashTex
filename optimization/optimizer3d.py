@@ -49,6 +49,7 @@ class Optimizer3D:
                  camera_fov:float=30.0,
                  camera_dist:float=5.0,
                  model_name='Lykon/DreamShaper',
+                 controlnet_name=None,
                  guidance:str='SDS_sd',
                  guidance_scale:float=50.0,
                  min_noise_level:float=0.02,
@@ -58,7 +59,6 @@ class Optimizer3D:
                  weighting_strategy:str='fantasia3D',
                  sds_loss_style:str='standard',
                  lambda_recon_reg:float=1000.0,
-                 diffaug:bool=False,
                  save_img:int=100,
                  save_video:int=400,
                  progress_freq:int=50,
@@ -94,8 +94,6 @@ class Optimizer3D:
         
         self.lambda_recon_reg = lambda_recon_reg
         self.lambda_albedo_smooth = lambda_albedo_smooth
-        
-        self.diffaug = diffaug
 
         self.save_image_freq = save_img
         self.save_video_freq = save_video
@@ -107,8 +105,9 @@ class Optimizer3D:
         
         self.unwrap_uv = unwrap_uv
         
-        if self.guidance == 'ControlNet_illumination':
-            self.irr_maps_list = glob.glob("load/lights/sample/*.hdr")
+        if self.guidance == 'SDS_LightControlNet':
+            # self.irr_maps_list = glob.glob("load/lights/sample/*.hdr")
+            self.irr_maps_list = ["load/lights/studio_small_03_4k.hdr"]
 
             self.env_light_list = [CustomEnvLight(
                 irr_map, scale=2.0
@@ -140,89 +139,24 @@ class Optimizer3D:
             self.vgg_loss = VGGLoss()
         self.vgg_loss = self.vgg_loss.to(device)
 
-        if guidance == 'ControlNet_illumination' or self.guidance == 'ControlNet_img':
+        if guidance == 'SDS_LightControlNet':
             self.prepare_cond_renderer()
         
-        
-        if preloaded_guidance is not None:
-            self.loss_guidance = preloaded_guidance
-        else:
-            self.loss_guidance = set_loss_guidance(guidance=guidance,
-                                                   min_noise_level=min_noise_level, 
-                                                   max_noise_level=max_noise_level, 
-                                                   model_name=model_name, 
-                                                   distilled_encoder=distilled_encoder, 
-                                                   grad_clip=grad_clip, 
-                                                   grad_center=grad_center, 
-                                                   weighting_strategy=weighting_strategy, 
-                                                   sds_loss_style=sds_loss_style,
-                                                   clip_tokenizer=clip_tokenizer,
-                                                   clip_text_model=clip_text_model,
-                                                   unet=unet)
+        self.loss_guidance = set_loss_guidance(guidance=guidance,
+                                                min_noise_level=min_noise_level, 
+                                                max_noise_level=max_noise_level, 
+                                                model_name=model_name,
+                                                controlnet_name=controlnet_name,
+                                                distilled_encoder=distilled_encoder, 
+                                                grad_clip=grad_clip, 
+                                                grad_center=grad_center, 
+                                                weighting_strategy=weighting_strategy, 
+                                                sds_loss_style=sds_loss_style,
+                                                clip_tokenizer=clip_tokenizer,
+                                                clip_text_model=clip_text_model,
+                                                unet=unet)
             
          
-
-            
-    def optimize_with_mesh(self, textured_mesh, num_iters):
-
-        optimizer = torch.optim.Adam(self.tsdf.parameters(), lr=0.01)
-
-        print("Initializing implicit texture...")
-                
-        if self.no_tqdm:
-            loop = range(num_iters)
-        else:
-            loop = tqdm(range(num_iters))
-        for iter in loop:
-            
-            # Choose random camera parameters
-            azim = (np.random.rand(self.batch_size)) * 360
-            elev = np.random.randn(self.batch_size) * 15
-            fov = self.camera_fov - 20 * np.random.rand(self.batch_size)
-            dist = self.camera_dist - 1 * np.random.rand(self.batch_size)
-
-            # Render image for chosen camera parameters
-            camera_dict = dict(dist=dist, azim=azim, elev=elev, fov=fov)
-
-            rendered_dict = self.draw_implicits(camera_dict, image_resolution=self.image_resolution, perturb=(self.lambda_albedo_smooth > 0))
-            
-            image = rendered_dict['images']
-            normals = rendered_dict['normals']
-            sillhouette = rendered_dict['sillhouettes']
-
-            # Render reference image for chosen camera parameters
-            reference_camera_dict = dict(dist=dist, azim=-azim, elev=-elev, fov=fov)
-            reference_dict = self.draw_meshes(reference_camera_dict, textured_mesh)
-            ref_image = reference_dict['images']
-            ref_normals = reference_dict['normals']
-            ref_sillhouette = reference_dict['sillhouettes']
-
-            # Compute loss and perform back propagation
-            mask = ref_sillhouette.repeat(1,3,1,1) > 0
-            loss_recon = F.mse_loss(image[mask], ref_image[mask]) + F.mse_loss(sillhouette, ref_sillhouette)
-            
-            loss_albedo_smooth = 0
-            
-            loss = loss_recon + loss_albedo_smooth
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
-            if not self.no_tqdm:
-                loop.set_description(f'Loss Recon: {float(loss_recon):.4f}, Loss Albedo: {float(loss_albedo_smooth):.4f}')
-
-            # Save current results
-            if (iter+1) % 100 == 0:
-                torchvision.utils.save_image(torch.cat([image, ref_image], dim=-2), f"{self.output_dir}/init_{str(iter+1).zfill(4)}.png")
-                torchvision.utils.save_image(torch.cat([1-normals, ref_normals], dim=-2), f"{self.output_dir}/init_normal_{str(iter+1).zfill(4)}.png")
-                
-                torchvision.utils.save_image(rendered_dict['images_diffuse'], f"{self.output_dir}/init_{str(iter+1).zfill(4)}_diffuse.png")
-                torchvision.utils.save_image(rendered_dict['images_specular'], f"{self.output_dir}/init_{str(iter+1).zfill(4)}_specular.png")
-
-
-        # write_360_video_diffrast(self.test_renderer, output_filename=f'{self.output_dir}/nerf_initialize.mp4')
-        return self.tsdf
 
     def sample_character_sheet_cameras(self, sheet_size=2):
         num_view = sheet_size * sheet_size
@@ -284,6 +218,11 @@ class Optimizer3D:
     
     def optimize_with_prompts(self, prompt, negative_prompt, num_iters, textured_mesh=None, fixed_target_images=None, fixed_target_masks=None, fixed_target_azim=None, fixed_target_elev=None, progress_callback=None):
                     
+        if self.guidance == 'SDS_LightControlNet':
+            ref_camera_dict = dict(dist=self.camera_dist, azim=-fixed_target_azim, elev=-fixed_target_elev, fov=self.camera_fov)
+        
+            fixed_target_images = self.prepare_target_image(ref_camera_dict, prompt, negative_prompt, load=False)
+        
         optimizer = torch.optim.Adam(self.tsdf.parameters(), lr=0.01)
 
         sds_loss_start = num_iters // 8
@@ -301,7 +240,7 @@ class Optimizer3D:
             # Enable SDS after a warm-up period to init the texture from the fixed_target_images
             enable_sds_loss = iter >= sds_loss_start
             
-            if self.guidance == 'ControlNet_illumination':
+            if self.guidance == 'SDS_LightControlNet':
                 
                 enable_illumination_loss = True
 
@@ -316,7 +255,6 @@ class Optimizer3D:
                 
                 rand_env_light = random.choice(self.env_light_list)
                 self.env_light_cond_random = lambda *args, **kwargs: rand_env_light(*args, **kwargs, rotation=rotation)
-                # self.env_light_cond_random = lambda *args, **kwargs: self.env_light_cond_raw(*args, **kwargs, rotation=rotation)
             
             if enable_illumination_loss:
                 rendered_dict = self.draw_implicit_batch_individual(batch_size=self.batch_size, image_resolution=self.image_resolution, env_light=self.env_light_cond_random)
@@ -336,42 +274,26 @@ class Optimizer3D:
                 loss_reg = loss_reg + loss_albedo_smooth
             
             if self.lambda_recon_reg > 0:
-                if fixed_target_images is not None:
-                    recon_azim = -fixed_target_azim + (torch.randn_like(fixed_target_azim) * 1.0)
-                    recon_elev = -fixed_target_elev + (torch.randn_like(fixed_target_elev) * 1.0)
-                    recon_fov = self.camera_fov
-                    recon_dist = self.camera_dist
-                    ref_image = fixed_target_images
+                recon_azim = -fixed_target_azim + (torch.randn_like(fixed_target_azim) * 1.0)
+                recon_elev = -fixed_target_elev + (torch.randn_like(fixed_target_elev) * 1.0)
+                recon_fov = self.camera_fov
+                recon_dist = self.camera_dist
+                ref_image = fixed_target_images
 
-                    ref_sillhouette = fixed_target_masks
-                    
-                    # Render image for fixed target camera parameters
-                    recon_camera_dict = dict(dist=recon_dist, azim=recon_azim, elev=recon_elev, fov=recon_fov)
-                    
-                    num_view = len(fixed_target_azim)
-            
-                    sheet_size = int(np.sqrt(num_view))
+                ref_sillhouette = fixed_target_masks
+                
+                # Render image for fixed target camera parameters
+                recon_camera_dict = dict(dist=recon_dist, azim=recon_azim, elev=recon_elev, fov=recon_fov)
+                
+                num_view = len(fixed_target_azim)
+        
+                sheet_size = int(np.sqrt(num_view))
 
-                    res = 1024 // sheet_size
-                    
-                    recon_rendered_dict = self.draw_implicits(recon_camera_dict, image_resolution=res, env_light=self.env_light_cond_fixed)
-                    recon_rendered_image = recon_rendered_dict['images']                    
-                else:
-                    recon_azim = -azim
-                    recon_elev = -elev
-                    recon_fov = fov
-                    recon_dist = dist
+                res = 1024 // sheet_size
                 
-                    # Render reference image for chosen camera parameters
-                    reference_camera_dict = dict(dist=recon_dist, azim=recon_azim, elev=recon_elev, fov=recon_fov)
-                    reference_dict = self.draw_meshes(reference_camera_dict, textured_mesh)
-                    ref_image = reference_dict['images']
-                    # ref_normals = reference_dict['normals']
-                    ref_sillhouette = reference_dict['sillhouettes']
-                    
-                    # Already rendered implicit at this angle for SDS loss
-                    recon_rendered_image = rendered_image
-                
+                recon_rendered_dict = self.draw_implicits(recon_camera_dict, image_resolution=res, env_light=self.env_light_cond_fixed)
+                recon_rendered_image = recon_rendered_dict['images']                    
+    
             
                 def to224(x):
                     #return x
@@ -421,8 +343,27 @@ class Optimizer3D:
                     loss_sds = self.loss_guidance.train_step(
                         text_embeddings=text_embeddings, inputs=rendered_image, guidance_scale=self.guidance_scale, timestep_t=timestep_t
                     )
-                elif self.guidance == 'ControlNet_illumination':
-                    pass
+                elif self.guidance == 'SDS_LightControlNet':
+                    text_embeddings = self.loss_guidance.get_text_embeds(
+                        prompt=prompt_with_view_angle, 
+                        negative_prompt=[negative_prompt] * batch_size
+                    )
+                    
+                    img_cond = self.produce_cond_img(rendered_dict['camera'], env_light=self.env_light_cond_random)
+                    img_cond = img_cond.transpose(0,3,1,2)
+
+
+                    loss_sds = self.loss_guidance.train_step(
+                        text_embeddings=text_embeddings, inputs=rendered_image, guidance_scale=self.guidance_scale, 
+                        condition_image=img_cond, 
+                        timestep_t=timestep_t / 2 + 0.5, 
+                        # timestep_t = None, 
+                        save_dir = self.output_dir if (iter+1) % 10 == 0 else None,
+                        # cond_strength=self.cond_strength
+                        cond_strength=timestep_t,
+                        rescale_cfg=0.7
+
+                    )
             
             else:
                 loss_sds = 0.0
@@ -457,11 +398,7 @@ class Optimizer3D:
                
             # Save video
             if self.save_video_freq > 0 and (iter+1) % self.save_video_freq == 0:
-                if hasattr(self, 'env_light') and isinstance(self.env_light, list):
-                    for i in range(len(self.irr_maps_list)):
-                        write_360_video_diffrast(self.renderer, output_filename=f"{self.output_dir}/{self.guidance}_{iter+1}_{self.irr_maps_list[i].split('/')[-1].split('.')[0]}.mp4", env_light=self.env_light[i])
-                else:
-                    write_360_video_diffrast(self.renderer, output_filename=f"{self.output_dir}/{self.guidance}_{iter+1}.gif")
+                write_360_video_diffrast(self.renderer, output_filename=f"{self.output_dir}/{self.guidance}_{iter+1}.gif")
                     
                 self.render_with_rotate_light(self.renderer, output_filename=f"{self.output_dir}/{self.guidance}_{iter+1}.gif")
             
@@ -601,4 +538,124 @@ class Optimizer3D:
             save_func(f"{out.save_name}", **out.params)
             
         torch.save(self.tsdf.state_dict(), output_dir + "/final_model.ckpt")
+
+    def prepare_cond_renderer(self):
+        material_m0r1 = PBRMaterial({"use_bump": False,
+                        "min_metallic": 0.0,
+                        "max_metallic": 0.0,
+                        "min_roughness": 1.,
+                        "max_roughness": 1.,
+                        "min_albedo": 1.0,
+                        "max_albedo": 1.0}).to(self.device)
+        material_m5r5 = PBRMaterial({"use_bump": False,
+                                "min_metallic": 0.5,
+                                "max_metallic": 0.5,
+                                "min_roughness": 0.5,
+                                "max_roughness": 0.5,
+                                "min_albedo": 1.0,
+                                "max_albedo": 1.0}).to(self.device)
+        material_m1r0 = PBRMaterial({"use_bump": False,
+                                "min_metallic": 1.0,
+                                "max_metallic": 1.0,
+                                "min_roughness": 0.,
+                                "max_roughness": 0.,
+                                "min_albedo": 1.0,
+                                "max_albedo": 1.0}).to(self.device)
+        material_list = [material_m0r1, material_m5r5, material_m1r0]
+        self.material_renderer_list = [NVDiffRasterizer({"context_type": "cuda"}, geometry=self.test_renderer.geometry, background=self.test_renderer.background, material=x) for x in material_list]
+
+
+    def produce_cond_img(self, camera_dict, env_light=None, image_resolution = 512):
+        R, T = look_at_view_transform(dist=camera_dict['dist'], elev=camera_dict['elev'], azim=camera_dict['azim'])
+        if 'y_offset' in camera_dict:
+            T[:,1] = T[:,1] + camera_dict['y_offset']
+        cameras = FoVPerspectiveCameras(device=self.device, R=R, T=T, fov=camera_dict['fov'])
+        # cameras = PerspectiveCameras(device=device, R=R, T=T, focal_length=1, in_ndc=False, image_size=torch.tensor([512,512]).unsqueeze(0))
+        c2w = cameras.get_world_to_view_transform().inverse().get_matrix().contiguous().to(self.device)
+
+        camera_positions = cameras.get_camera_center().to(self.device)
+        light_distances = (torch.rand(len(cameras)) * (1.5 - 0.8) + 0.8).to(self.device)
+        light_direction = F.normalize(camera_positions + torch.randn_like(camera_positions) * 1, dim=-1)
+        light_positions = light_distances[..., None] * light_direction
+        mvp_mtx = cameras.get_full_projection_transform().get_matrix().permute(0,2,1).contiguous().to(self.device)
+
+        focal = fov_to_focal(camera_dict['fov'], image_resolution)
+        # print(focal)
+        if len(focal.shape) > 0:
+            directions_all = []
+            for i in range(focal.shape[0]):
+                directions = get_ray_directions(image_resolution, image_resolution, focal[i]).to(self.device)
+                directions_all.append(directions)
+            directions = torch.stack(directions_all)
+            # print(directions.shape)
+        else:
+            directions = get_ray_directions(image_resolution, image_resolution, focal).to(self.device)
+
+        rays_o, rays_d = get_rays(directions, c2w)
+
+
+        img_conds = []
+        for renderer in self.material_renderer_list:
+            with torch.no_grad():
+                out = renderer(
+                    mvp_mtx=mvp_mtx, 
+                    camera_positions=camera_positions,
+                    light_positions=camera_positions,
+                    height=image_resolution, width=image_resolution,
+                    c2w=c2w, rays_d=rays_d, env_bg=False, env_light=env_light
+                )
+            img_conds.append(out['comp_rgb'].cpu().numpy())
+
+        img_conds = [x[...,0] for x in img_conds]
+        img_conds = np.stack(img_conds, axis=-1) # B x H x W x 3
+        img_conds = img_conds.clip(0, 1)
+        return img_conds
+
+
+    def prepare_target_image(self, camera_dict, prompt, negative_prompt, load=False):
+        num_view = len(camera_dict['azim'])
+        
+        sheet_size = int(np.sqrt(num_view))
+        
+        res = 1024 // sheet_size
+        
+        cond = self.produce_cond_img(camera_dict, self.env_light_cond_fixed, image_resolution=res)
+        
+        sheet_size = int(np.sqrt(cond.shape[0]))
+        H, W = cond.shape[1], cond.shape[2]
+        character_sheet = torchvision.utils.make_grid(torch.tensor(cond).permute(0,3,1,2).to(self.device), nrow=sheet_size, padding=0).unsqueeze(0)
+        
+        torchvision.utils.save_image(character_sheet, f"{self.output_dir}/ref_cond.png")
+        
+        control_image = character_sheet # 1 x 3 x H x W
+        
+        init_image = torch.cat([character_sheet[:,1:2]] * 3, dim=1)
+        torchvision.utils.save_image(init_image, f"{self.output_dir}/ref_init.png")
+
+        generator = torch.manual_seed(1)
+        with torch.no_grad():
+            image = self.loss_guidance.pipe(prompt, num_inference_steps=20, generator=generator, image=control_image, negative_prompt=negative_prompt).images[0]
+            # image = pipe(prompt, num_inference_steps=20, generator=generator, image=init_image, negative_prompt=negative_prompt, control_image=control_image, strength=1.0).images[0]
+
+        image.save(f"{self.output_dir}/ref_controlnet.png")
+        
+        ref_img = np.array(image) / 255
+        ref_img = torch.tensor(ref_img).to(self.device).float()
+        ref_img = ref_img.unsqueeze(0).permute(0, 3, 1, 2) # B x C x H x W
+        
+        # return from_character_sheet(ref_img, 4)
+        
+        images_list = torch.split(ref_img, H, dim=2)  # step=H, where 'H' is the height size
+        images_list = [torch.split(img, W, dim=3) for img in images_list]  # step=W, where 'W' is the width size
+        images_tensor = torch.cat([torch.cat(images) for images in images_list])
+        
+        
+        return images_tensor
+        
+        
+        
+        
+        
+        
+        
         
