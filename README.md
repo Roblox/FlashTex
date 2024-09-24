@@ -37,7 +37,7 @@ pip install -r requirements.txt
 ### Inference with Depth ControlNet (No PBR)
 
 ```
-python generate_texture.py --input_mesh ./load/examples/horse_saddle.glb \ 
+python generate_texture.py --input_mesh ./load/examples/horse_saddle_compressed.obj \ 
                            --output ./output/horse_saddle/ \
                            --prompt "horse saddle, leather, craft, sewing, tanning, 20-th century, best quality, hd" \
                            --rotation_y 180 \
@@ -73,7 +73,7 @@ python tools/test_controlnet.py
 #### Run texture generation with pre-trained lightcontrolnet
 
 ```
-python generate_texture.py --input_mesh ./load/examples/horse_saddle.glb \ 
+python generate_texture.py --input_mesh ./load/examples/horse_saddle_compressed.obj \ 
                            --output ./output/horse_saddle_pbr/ \
                            --prompt "horse saddle, leather, craft, sewing, tanning, 20-th century, best quality, hd" \
                            --rotation_y 180 \
