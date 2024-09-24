@@ -83,8 +83,7 @@ python generate_texture.py --input_mesh ./load/examples/horse_saddle_compressed.
 
 Besides `texture_kd.png`, you will also find `texture_roughness.png`, `texture_metallic.png`, and `texture_nrm.png` in the output directory. You will also get gifs output as below:
 
-<img src="assets/horse_saddle_lightcontrolnet.gif" width="256"/>
-<img src="assets/horse_saddle_rotate_light.gif" width="256"/>
+<img src="assets/horse_saddle_lightcontrolnet.gif" width="256"/> <img src="assets/horse_saddle_rotate_light.gif" width="256"/>
 
 Left: Rotating Object with the fixed lighting. Right: Fixed Object with the rotating lighting.
 
