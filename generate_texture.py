@@ -105,6 +105,8 @@ def parse_args(arglist=None):
     parser.add_argument('--no_tqdm', action='store_true', help='No tqdm logging')
     parser.add_argument('--SDS_camera_dist', type=float, default=5.0)
     parser.add_argument('--pbr_material', action='store_true', help='Use PBR Material.')
+    parser.add_argument('--lambda_recon_reg', type=float, default=1000.0, help='Reconstruction regularization')
+    parser.add_argument('--lambda_albedo_smooth', type=float, default=5.0, help='Albedo smoothness regularization')
     args = parser.parse_args(args=arglist)
     return args
 
@@ -286,7 +288,8 @@ def direct_optimization_nvdiffrast(args, mesh_dict, target_images, target_masks,
                               controlnet_name=args.controlnet_name,
                               output_dir=optimization_output_dir,
                               distilled_encoder=args.distilled_encoder,
-                              lambda_recon_reg=1000.0,
+                              lambda_recon_reg=args.lambda_recon_reg,
+                              lambda_albedo_smooth=args.lambda_albedo_smooth,
                               grad_clip=0.1,
                               save_img=0 if args.production else 100,
                               save_video=0 if args.production else 1000,

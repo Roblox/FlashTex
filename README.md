@@ -18,13 +18,15 @@ Roblox, Carnegie Mellon University, Stanford University
 
 ---
 
+<video src="./assets/stitched_goblets_output.mp4"></video>
+
 Manually creating textures for 3D meshes is time-consuming, even for expert visual content creators. We propose a fast approach for automatically texturing an input 3D mesh based on a user-provided text prompt. Importantly, our approach disentangles lighting from surface material/reflectance in the resulting texture so that the mesh can be properly relit and rendered in any lighting environment. Our method introduces LightControlNet, a new text-to-image model based on the ControlNet architecture, that allows the specification of the desired lighting as a conditioning image to the model. Our text-to-texture pipeline then constructs the texture in two stages. The first stage produces a sparse set of visually consistent reference views of the mesh using LightControlNet. The second stage applies a texture optimization based on Score Distillation Sampling (SDS) that works with LightControlNet to increase the texture quality while disentangling surface material from lighting. We show that this pipeline is significantly faster than previous text-to-texture methods, while producing high-quality and relightable textures.
 
 ## Getting Started
 
 ### Dependencies
 
-Our environment has been tested on linux, pytorch 2.0, CUDA 11.8.
+Our environment has been tested on linux, pytorch 2.0, and CUDA 11.8.
 
 1. Install pytorch and CUDA.
 2. Install pytorch3d following [link](https://github.com/facebookresearch/pytorch3d/blob/main/INSTALL.md).
@@ -54,9 +56,21 @@ Please refer to `generate_texture.py` for other parameters. The script will expo
 
 ### Inference with LightControlNet
 
-#### Run texture generation with pre-trained lightcontrolnet
+We have uploaded our pre-trained lightcontrolnet weights to huggingface at [link](https://huggingface.co/kangled/lightcontrolnet/). With the `controlnet_name` specified as `kangled/lightcontrolnet`, the scripts will automatically download the weights. 
 
-We have uploaded our pre-trained lightcontrolnet weights to huggingface at ([link](https://huggingface.co/kangled/lightcontrolnet/)). With the `controlnet_name` specified as `kangled/lightcontrolnet`, the script will automatically download the weights. 
+#### 2D Generation with LightControlNet
+
+You can run the script below to run LightControlNet on a prepared control image, and get the following results:
+
+```
+python tools/test_controlnet.py
+```
+
+| Input Control Image | "Leather" | "Wooden"  | "Steel" |
+| --- | --- | --- | --- |
+| <img src="load/examples/material_ball/011_cond.png" width="256"/> | <img src="assets/lightcontrolnet/lightcontrolnet_000_out.png" width="256"/> | <img src="assets/lightcontrolnet/lightcontrolnet_001_out.png" width="256"/> | <img src="assets/lightcontrolnet/lightcontrolnet_002_out.png" width="256"/>
+
+#### Run texture generation with pre-trained lightcontrolnet
 
 ```
 python generate_texture.py --input_mesh ./load/examples/sneaker.obj \ 
@@ -66,6 +80,8 @@ python generate_texture.py --input_mesh ./load/examples/sneaker.obj \
                            --guidance_sds LightControlNet --pbr_material \
                            --controlnet_name kangled/lightcontrolnet
 ```
+
+Besides `texture_kd.png`, you will also find `texture_roughness.png`, `texture_metallic.png`, and `texture_nrm.png` in the output directory.
 
 ---
 
@@ -119,7 +135,9 @@ rendered_data
 
 #### Training
 
-We follow the diffusers library's ControlNet training script ([link](https://github.com/huggingface/diffusers/blob/main/examples/controlnet/train_controlnet.py)). A few extra dependencies need to be installed following the [instructions](https://github.com/huggingface/diffusers/tree/main/examples/controlnet#installing-the-dependencies).
+We follow the diffusers library's ControlNet training script ([link](https://github.com/huggingface/diffusers/blob/main/examples/controlnet/train_controlnet.py)). We train our lightcontrolnet based on the weights from a pretrained depth controlnet.
+
+A few extra dependencies need to be installed following the [instructions](https://github.com/huggingface/diffusers/tree/main/examples/controlnet#installing-the-dependencies). We provide an example training script below. Please refer to [instructions](https://github.com/huggingface/diffusers/tree/main/examples/controlnet) for multi-gpu training.
 
 ```
 export MODEL_DIR="stable-diffusion-v1-5/stable-diffusion-v1-5"
@@ -137,6 +155,32 @@ accelerate launch train_controlnet.py \
  --train_batch_size=4
 ```
 
+## FAQs
+
+***Q1***: *I'm not getting good results.*
+
+Make sure you follow the guidelines and walk through the questions below. In general, results with depth ControlNet are visually better than lightcontrolnet as the depth one is trained on much more data.
+
+***Q2***: *Baked-in lighting still exists in generated albedo.*
+
+Our method is trained without PBR data. It is difficult to recover perfect PBR materials without data priors. Sometimes tuning down `lambda_recon_reg` can alleviate this problem.
+
+***Q3***: *Why do the generated visuals look different from yours on the website?*
+
+Some of our videos on our website are rendered using Blender. You can import the generated texture into Blender using its built-in function.
+
+***Q4***: *I'm getting over-saturated color.*
+
+Using a larger `lambda_recon_reg` or a smaller `guidance_scale` can help.
+
+***Q5***: *The running time is longer than expected.*
+
+The initial run takes significantly longer as it requires downloading pre-trained weights and compiling certain components. Once completed, subsequent runs will execute at normal speed. Additionally, generating intermediate outputs, such as videos, adds to the processing time. To speed up the process, you can use the `--production` flag to disable these intermediate outputs and only generate the final result.
+
+***Q6***: *There is an external package `threestudio`. Is it different from [threestudio](https://github.com/threestudio-project/threestudio)?*
+
+Yes. While our codebase is heavily based on threestudio, we did make a few changes within the package, e.g., add customized environment lighting support in PBR materials.
+
 ## Citation
 
 If you find this repository useful for your research, please cite the following work.
@@ -153,4 +197,4 @@ If you find this repository useful for your research, please cite the following 
 ## Acknowledgments
 We thank Benjamin Akrish, Victor Zordan, Dmitry Trifonov, Derek Liu, Sheng-Yu Wang, Gaurav Parmer, Ruihan Gao, Nupur Kumari, and Sean Liu for their discussion and help. This work was done when Kangle was an intern at Roblox. The project is partly supported by Roblox. JYZ is partly supported by the Packard Fellowship. KD is supported by the Microsoft Research PhD Fellowship. 
 
-Part of this codebase borrows from [threestudio](https://github.com/threestudio-project/threestudio) and [stable-dreamfusion](https://github.com/ashawkey/stable-dreamfusion).
+Part of this codebase borrows from [threestudio](https://github.com/threestudio-project/threestudio), [stable-dreamfusion](https://github.com/ashawkey/stable-dreamfusion), and [objaverse](https://github.com/allenai/objaverse-xl/tree/main/scripts/rendering).
