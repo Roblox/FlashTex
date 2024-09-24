@@ -110,7 +110,7 @@ class Optimizer3D:
             self.irr_maps_list = ["load/lights/studio_small_03_4k.hdr"]
 
             self.env_light_list = [CustomEnvLight(
-                irr_map, scale=2.0
+                irr_map, scale=4.0
             ) for irr_map in self.irr_maps_list]
 
             self.env_light_cond_raw = CustomEnvLight(
@@ -395,12 +395,6 @@ class Optimizer3D:
                     torchvision.utils.save_image(recon_rendered_image, f"{self.output_dir}/{self.guidance}_recon_{iter_name}.png", padding=0)
                 if ref_image is not None:
                     torchvision.utils.save_image(ref_image, f"{self.output_dir}/{self.guidance}_ref_{iter_name}.png", padding=0)
-               
-            # Save video
-            if self.save_video_freq > 0 and (iter+1) % self.save_video_freq == 0:
-                write_360_video_diffrast(self.renderer, output_filename=f"{self.output_dir}/{self.guidance}_{iter+1}.gif")
-                    
-                self.render_with_rotate_light(self.renderer, output_filename=f"{self.output_dir}/{self.guidance}_{iter+1}.gif")
             
             # Progress
             if progress_callback is not None and (((iter+1) % self.progress_freq == 0) or (iter == num_iters - 1)):

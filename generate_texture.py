@@ -42,8 +42,8 @@ from models.avatar_image_generator import (
 from optimization.optimizer3d import Optimizer3D
 from optimization.setup_geometry3d import setup_geometry3d
 from utils.write_video import (
-    write_360_video,
-    write_360_video_diffrast
+    write_360_video_diffrast,
+    render_with_rotate_light
 )
 
 
@@ -97,7 +97,7 @@ def parse_args(arglist=None):
     parser.add_argument('--prompt_masking', dest='prompt_masking_style', type=str, default='global', help='global | front_back | front_back_localized')
     parser.add_argument('--prompt', type=str, default='a mouse pirate, detailed, hd', help='Text prompt for stable diffusion')
     parser.add_argument('--additional_prompt', dest="a_prompt", type=str, default="", help='Additional text prompt for stable diffusion')
-    parser.add_argument('--negative_prompt', dest="n_prompt", type=str, default="nude, naked, bad quality, blurred, low resolution, low quality, low res", help='Negative text prompt for stable diffusion')  
+    parser.add_argument('--negative_prompt', dest="n_prompt", type=str, default="bad quality, blurred, low resolution, low quality, low res", help='Negative text prompt for stable diffusion')  
     parser.add_argument('--device', type=str, default="cuda", help='Device to use (cpu or cuda), defaults to cuda when available.')
     parser.add_argument('--guidance_scale', type=float, default=50.0, help='Guidance Scale')
     parser.add_argument('--cond_strength', type=float, default=1.0, help='Condtioning Strength for ControlNet')
@@ -106,7 +106,7 @@ def parse_args(arglist=None):
     parser.add_argument('--SDS_camera_dist', type=float, default=5.0)
     parser.add_argument('--pbr_material', action='store_true', help='Use PBR Material.')
     parser.add_argument('--lambda_recon_reg', type=float, default=1000.0, help='Reconstruction regularization')
-    parser.add_argument('--lambda_albedo_smooth', type=float, default=5.0, help='Albedo smoothness regularization')
+    parser.add_argument('--lambda_albedo_smooth', type=float, default=0.0, help='Albedo smoothness regularization')
     args = parser.parse_args(args=arglist)
     return args
 
@@ -314,6 +314,8 @@ def direct_optimization_nvdiffrast(args, mesh_dict, target_images, target_masks,
     if not args.production:
         write_360_video_diffrast(renderers['testing'], output_filename=f"{optimization_output_dir}/{guidance}_final_rgb.gif")
         
+        render_with_rotate_light(renderers['optimization'], output_filename=f"{optimization_output_dir}/{guidance}_final_rgb_rotate.gif")
+
         write_360_video_diffrast(renderers['testing'], output_filename=f"{optimization_output_dir}/{guidance}_final_rgb_up.gif", elev=-30)
         
         shutil.copyfile(f'{optimization_output_dir}/{guidance}_final_rgb.gif', f'{args.output_dir}/video360.gif')

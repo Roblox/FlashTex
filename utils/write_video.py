@@ -14,7 +14,14 @@ from pytorch3d.renderer import (
     DirectionalLights,
 )
 
+import envlight
+import glob
+import random
+
+from scipy.spatial.transform import Rotation
+
 from mesh.render import draw_meshes
+from optimization.utils.envlight_wrapper import CustomEnvLight
 
 
 def write_360_video(mesh:Meshes, output_filename:str, walkaround_y:float, output_resolution:int=512):
@@ -100,6 +107,58 @@ def write_360_video_diffrast(renderer, output_filename, resolution=512, device='
     output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_rgb.gif'
     os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_rgb_*.png {output_filename}")
     
+    shutil.rmtree(temp_dir)
+
+def render_with_rotate_light(renderer, output_filename, resolution=512, device='cuda', elev=0, camera_dist=5.0, fov=30):    
+    temp_dir = tempfile.mkdtemp(prefix='nvdiffrast')
+    
+    num_frames = 72
+    
+    R, T = look_at_view_transform(dist=camera_dist, elev=elev, azim=0)
+    cameras = FoVPerspectiveCameras(device=device, R=R, T=T, fov=fov)
+    
+    c2w = cameras.get_world_to_view_transform().inverse().get_matrix().transpose(1,2).contiguous().to(device)
+
+    camera_positions = cameras.get_camera_center().to(device)
+    light_distances = 1.5
+    light_direction = F.normalize(camera_positions, dim=-1)
+    light_positions = light_distances * light_direction
+    
+    mvp_mtx = cameras.get_full_projection_transform().get_matrix().permute(0,2,1).contiguous()
+    
+    focal = fov_to_focal(fov, resolution)
+    directions = get_ray_directions(resolution, resolution, focal).to(device)
+
+    rays_o, rays_d = get_rays(directions, c2w)
+    
+    env_light = CustomEnvLight(
+        'load/lights/studio_small_03_4k.hdr', scale=5.0
+    )
+    
+    for frame_idx in range(num_frames):
+        frame_t = float(frame_idx) / float(num_frames)
+        
+        light_azim = frame_t * -360.0
+        
+        # r = Rotation.from_euler('zyx', [180, light_azim, 0], degrees=True)
+        r = Rotation.from_euler('zyx', [0, light_azim, 0], degrees=True)
+        rotation = torch.tensor(r.as_matrix()).float().to(device)
+
+        current_custom_light = lambda *args, **kwargs: env_light(*args, **kwargs, rotation=rotation)
+
+        with torch.no_grad():
+            out = renderer(mvp_mtx=mvp_mtx, 
+                            camera_positions=camera_positions,
+                            light_positions=light_positions,
+                            height=resolution, width=resolution,
+                            c2w=c2w, rays_d=rays_d, env_bg=False, env_light=current_custom_light,
+                            mean_albedo_diffuse=False)
+            
+        frame_filename = os.path.join(temp_dir, f'walk_rgb_{str(frame_idx).zfill(4)}.png')
+        torchvision.utils.save_image(out['comp_rgb'].permute(0,3,1,2), frame_filename)
+    
+    output_gif_filename = '.'.join(output_filename.split('.')[:-1]) + '_rgb_rotate_light.gif'
+    os.system(f"convert -delay 10 -loop 0 {temp_dir}/walk_rgb_*.png {output_gif_filename}")
     shutil.rmtree(temp_dir)
 
     

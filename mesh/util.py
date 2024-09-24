@@ -123,7 +123,7 @@ def load_mesh(mesh_filename:str,
     return load_mesh_obj(mesh_filename=mesh_filename, uv_unwrap=uv_unwrap, uv_rescale=uv_rescale)
     
 
-def load_mesh_obj(mesh_filename, uv_unwrap:bool=False, uv_rescale:bool=False):
+def load_mesh_obj(mesh_filename, uv_unwrap:bool=False, uv_rescale:bool=False, centering:str='minmax'):
     vertices, faces_info, aux = load_obj(mesh_filename)
     vertices = vertices.unsqueeze(0)
     faces = faces_info.verts_idx.unsqueeze(0)
@@ -137,7 +137,6 @@ def load_mesh_obj(mesh_filename, uv_unwrap:bool=False, uv_rescale:bool=False):
         uvs = (uvs - uvs_min) / (uvs_max - uvs_min)
 
     # Center verts
-    centering = 'minmax'
     if centering == 'minmax':
         all_verts_min = vertices.min(dim=1, keepdims=True).values
         all_verts_max = vertices.max(dim=1, keepdims=True).values
@@ -194,50 +193,6 @@ def generate_atlas(mesh, texture_tile_size:int):
     new_mesh.textures = new_textures
     
     return new_mesh
-
-
-def load_mesh_hdf5(mesh_filename, uv_unwrap:bool=False, uv_rescale:bool=False):
-    hdf5_file = h5py.File(mesh_filename, 'r')
-    vertex_annotations = hdf5_file['annotations']['vertex']
-    vertices = torch.from_numpy(hdf5_file['neutral'][:].astype(np.float32)).unsqueeze(0)
-    faces = torch.from_numpy(hdf5_file['faces'][:].astype(np.int64)).unsqueeze(0)
-    uvs = torch.from_numpy(hdf5_file['uv_coords'][:].astype(np.float32)).unsqueeze(0)
-    faces_uvs = torch.from_numpy(hdf5_file['faces_uv_coords'][:].astype(np.int64)).unsqueeze(0)
-    
-    # Rescale UV
-    if uv_rescale:
-        uvs_min = uvs.min(dim=1, keepdims=True).values
-        uvs_max = uvs.max(dim=1, keepdims=True).values
-        uvs = (uvs - uvs_min) / (uvs_max - uvs_min)
-    
-    landmarks = {}
-    for key in vertex_annotations.keys():
-        if key in ['left_nose_border', 'right_nose_border', 'neck_back']:
-            continue
-        vertex_idx = int(vertex_annotations[key][0])
-        landmarks[key] = vertex_idx
-    print(landmarks)
-    
-    # landmark_indices = [landmarks[key] for key in landmarks.keys()]
-    # vertex_colors = torch.ones_like(vertices)
-    # vertex_colors[:,landmark_indices,:] = torch.tensor([1.0, 0.0, 0.0])
-    
-    # Scale so max extent=1.0
-    center = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
-    scale = 1.0 / vertices.abs().max()
-    vertices = vertices * scale
-    
-    texture_tile_size = 1024 # fixme
-    # textures = TexturesVertex(verts_features=vertex_colors)
-    texture_maps = torch.ones((1, texture_tile_size, texture_tile_size, 3), dtype=torch.float32)
-    textures = TexturesUV(verts_uvs=uvs, faces_uvs=faces_uvs, maps=texture_maps)
-    mesh = Meshes(verts=vertices, faces=faces, textures=textures)
-    
-    if uv_unwrap:
-        print("UV unwrapping...")
-        mesh = generate_atlas(mesh=mesh, texture_tile_size=texture_tile_size)
-    
-    return mesh, landmarks, center.squeeze(0), torch.tensor([scale]*3)
 
 
 # From: https://github.com/YadiraF/face3d/blob/master/face3d/mesh/io.py

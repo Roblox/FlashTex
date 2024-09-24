@@ -16,8 +16,6 @@ ECCV 2024, Oral
 
 Roblox, Carnegie Mellon University, Stanford University
 
----
-
 https://github.com/user-attachments/assets/f5598c0b-94c0-48b7-a809-d75750a2a8fc
 
 Manually creating textures for 3D meshes is time-consuming, even for expert visual content creators. We propose a fast approach for automatically texturing an input 3D mesh based on a user-provided text prompt. Importantly, our approach disentangles lighting from surface material/reflectance in the resulting texture so that the mesh can be properly relit and rendered in any lighting environment. Our method introduces LightControlNet, a new text-to-image model based on the ControlNet architecture, that allows the specification of the desired lighting as a conditioning image to the model. Our text-to-texture pipeline then constructs the texture in two stages. The first stage produces a sparse set of visually consistent reference views of the mesh using LightControlNet. The second stage applies a texture optimization based on Score Distillation Sampling (SDS) that works with LightControlNet to increase the texture quality while disentangling surface material from lighting. We show that this pipeline is significantly faster than previous text-to-texture methods, while producing high-quality and relightable textures.
@@ -39,10 +37,10 @@ pip install -r requirements.txt
 ### Inference with Depth ControlNet (No PBR)
 
 ```
-python generate_texture.py --input_mesh ./load/examples/sneaker.obj \
-                           --output ./output/sneaker/ \
-                           --prompt "Sneaker that seems to be constructed from graffiti art, detailed, hd" \
-                           --rotation_y 180
+python generate_texture.py --input_mesh ./load/examples/horse_saddle.glb \ 
+                           --output ./output/horse_saddle/ \
+                           --prompt "horse saddle, leather, craft, sewing, tanning, 20-th century, best quality, hd" \
+                           --rotation_y 180 \
 ```
 
 Explanation for some primary parameters:
@@ -52,7 +50,9 @@ Explanation for some primary parameters:
 - `rotation_y`: Rotate the mesh along y (up) axis. We set this parameter as the example mesh is initially back-facing.
 - `production`: Use this flag to skip saving intermediate results and final gifs to save running time.
 
-Please refer to `generate_texture.py` for other parameters. The script will export the textured mesh and visualizations to `<output>` directory. Specifically, `output_mesh.obj` is the normalized mesh, `output_mesh.mtl` and `texture_kd.png` are exported textures. 
+Please refer to `generate_texture.py` for other parameters. The script will export the textured mesh and visualizations to `<output>` directory. Specifically, `output_mesh.obj` is the normalized mesh, `output_mesh.mtl` and `texture_kd.png` are exported textures. You will also get the output gif as below:
+
+<img src="assets/horse_saddle_noPBR.gif" width="256"/>
 
 ### Inference with LightControlNet
 
@@ -73,15 +73,20 @@ python tools/test_controlnet.py
 #### Run texture generation with pre-trained lightcontrolnet
 
 ```
-python generate_texture.py --input_mesh ./load/examples/sneaker.obj \ 
-                           --output ./output/sneaker/ \
-                           --prompt "Sneaker that seems to be constructed from graffiti art, detailed, hd" \
+python generate_texture.py --input_mesh ./load/examples/horse_saddle.glb \ 
+                           --output ./output/horse_saddle_pbr/ \
+                           --prompt "horse saddle, leather, craft, sewing, tanning, 20-th century, best quality, hd" \
                            --rotation_y 180 \
                            --guidance_sds LightControlNet --pbr_material \
                            --controlnet_name kangled/lightcontrolnet
 ```
 
-Besides `texture_kd.png`, you will also find `texture_roughness.png`, `texture_metallic.png`, and `texture_nrm.png` in the output directory.
+Besides `texture_kd.png`, you will also find `texture_roughness.png`, `texture_metallic.png`, and `texture_nrm.png` in the output directory. You will also get gifs output as below:
+
+<img src="assets/horse_saddle_lightcontrolnet.gif" width="256"/>
+<img src="assets/horse_saddle_rotate_light.gif" width="256"/>
+
+Left: Rotating Object with the fixed lighting. Right: Fixed Object with the rotating lighting.
 
 ---
 
@@ -175,7 +180,7 @@ Using a larger `lambda_recon_reg` or a smaller `guidance_scale` can help.
 
 ***Q5***: *The running time is longer than expected.*
 
-The initial run takes significantly longer as it requires downloading pre-trained weights and compiling certain components. Once completed, subsequent runs will execute at normal speed. Additionally, generating intermediate outputs, such as videos, adds to the processing time. To speed up the process, you can use the `--production` flag to disable these intermediate outputs and only generate the final result.
+The initial run takes significantly longer as it requires downloading pre-trained weights and compiling certain components. Once completed, subsequent runs will execute at normal speed. Additionally, generating intermediate outputs, such as videos, adds to the processing time. To speed up the process, you can use the `--production` flag to disable these intermediate outputs and only generate the final result. Additionally, the running time is also dependent on the size of the input mesh as meshes with more vertices and faces require longer time to load, render, and export.
 
 ***Q6***: *There is an external package `threestudio`. Is it different from [threestudio](https://github.com/threestudio-project/threestudio)?*
 

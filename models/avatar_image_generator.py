@@ -66,7 +66,6 @@ class AvatarImageGenerator:
             if pretrained_dir is not None and pretrained_dir != '':
                 pretrained_dir = os.path.join(pretrained_dir, 'diffusers', args.model_id)
             self.diffusion_model = self.create_diffusion_model(model_id=args.model_id, use_img2img=use_img2img, pretrained_dir=pretrained_dir)
-            preloaded_models[diffusion_model_name] = self.diffusion_model
 
     def create_diffusion_model(self, model_id:str, use_img2img:bool, pretrained_dir:str):
         args = self.args

@@ -19,7 +19,6 @@ from mesh.render import (
 
 from mesh.util import (
     load_mesh, 
-    load_mesh_hdf5,
     load_mesh_glb,
     rotate_mesh,
 )
@@ -41,12 +40,7 @@ class MeshDataset(object):
 
         self.device = device
         
-        if str(input_mesh).endswith('.hdf5'):
-            self.mesh, self.landmarks, self.mesh_center, self.mesh_scale = load_mesh_hdf5(
-                mesh_filename=input_mesh, uv_unwrap=uv_unwrap, uv_rescale=uv_rescale
-            )
-            self.texture_infos = {}
-        elif str(input_mesh).endswith('.glb'):
+        if str(input_mesh).endswith('.glb'):
             self.mesh, self.texture_infos, self.mesh_center, self.mesh_scale = load_mesh_glb(
                 mesh_filename=input_mesh
             )
