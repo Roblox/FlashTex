@@ -2,9 +2,12 @@
 
 # FlashTex: Fast Relightable Mesh Texturing with LightControlNet
 
+<a href="https://arxiv.org/abs/2402.13251"><img src="https://img.shields.io/badge/arXiv-2402.13251-b31b1b.svg" height=22.5></a>
+<a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" height=22.5></a>
+
 [**Project**](https://flashtex.github.io/) | [**Paper**](https://arxiv.org/abs/2402.13251)
 
-ECCV 2024, Oral
+**ECCV 2024, Oral**
 
  [Kangle Deng](https://dunbar12138.github.io/),
  [Timothy Omernick](),
@@ -18,7 +21,7 @@ Roblox, Carnegie Mellon University, Stanford University
 
 https://github.com/user-attachments/assets/f5598c0b-94c0-48b7-a809-d75750a2a8fc
 
-Manually creating textures for 3D meshes is time-consuming, even for expert visual content creators. We propose a fast approach for automatically texturing an input 3D mesh based on a user-provided text prompt. Importantly, our approach disentangles lighting from surface material/reflectance in the resulting texture so that the mesh can be properly relit and rendered in any lighting environment. Our method introduces LightControlNet, a new text-to-image model based on the ControlNet architecture, that allows the specification of the desired lighting as a conditioning image to the model. Our text-to-texture pipeline then constructs the texture in two stages. The first stage produces a sparse set of visually consistent reference views of the mesh using LightControlNet. The second stage applies a texture optimization based on Score Distillation Sampling (SDS) that works with LightControlNet to increase the texture quality while disentangling surface material from lighting. We show that this pipeline is significantly faster than previous text-to-texture methods, while producing high-quality and relightable textures.
+> Manually creating textures for 3D meshes is time-consuming, even for expert visual content creators. We propose a fast approach for automatically texturing an input 3D mesh based on a user-provided text prompt. Importantly, our approach disentangles lighting from surface material/reflectance in the resulting texture so that the mesh can be properly relit and rendered in any lighting environment. Our method introduces LightControlNet, a new text-to-image model based on the ControlNet architecture, that allows the specification of the desired lighting as a conditioning image to the model. Our text-to-texture pipeline then constructs the texture in two stages. The first stage produces a sparse set of visually consistent reference views of the mesh using LightControlNet. The second stage applies a texture optimization based on Score Distillation Sampling (SDS) that works with LightControlNet to increase the texture quality while disentangling surface material from lighting. We show that this pipeline is significantly faster than previous text-to-texture methods, while producing high-quality and relightable textures.
 
 ## Getting Started
 
