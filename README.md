@@ -1,21 +1,20 @@
-
-
 # FlashTex: Fast Relightable Mesh Texturing with LightControlNet
 
 <a href="https://arxiv.org/abs/2402.13251"><img src="https://img.shields.io/badge/arXiv-2402.13251-b31b1b.svg" height=22.5></a>
+<a href='https://github.com/dunbar12138/blender-render-toolkit/tree/main'><img src='https://img.shields.io/badge/Blender-render_toolkit-1?logo=blender' height=22.5></a>
 <a href="https://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/badge/License-Apache 2.0-green.svg" height=22.5></a>
 
 [**Project**](https://flashtex.github.io/) | [**Paper**](https://arxiv.org/abs/2402.13251)
 
 **ECCV 2024, Oral**
 
- [Kangle Deng](https://dunbar12138.github.io/),
- [Timothy Omernick](),
- [Alexander Weiss](),
- [Deva Ramanan](https://www.cs.cmu.edu/~deva/),
- [Jun-Yan Zhu](https://www.cs.cmu.edu/~junyanz/),
- [Tinghui Zhou](),
- [Maneesh Agrawala](https://graphics.stanford.edu/~maneesh/)
+[Kangle Deng](https://dunbar12138.github.io/),
+[Timothy Omernick](),
+[Alexander Weiss](),
+[Deva Ramanan](https://www.cs.cmu.edu/~deva/),
+[Jun-Yan Zhu](https://www.cs.cmu.edu/~junyanz/),
+[Tinghui Zhou](),
+[Maneesh Agrawala](https://graphics.stanford.edu/~maneesh/)
 
 Roblox, Carnegie Mellon University, Stanford University
 
@@ -32,21 +31,24 @@ Our environment has been tested on linux, pytorch 2.0, and CUDA 11.8.
 1. Install pytorch and CUDA.
 2. Install pytorch3d following [link](https://github.com/facebookresearch/pytorch3d/blob/main/INSTALL.md).
 3. Install other requirements:
+
 ```
 pip install -r requirements.txt
 ```
 
 ---
+
 ### Inference with Depth ControlNet (No PBR)
 
 ```
-python generate_texture.py --input_mesh ./load/examples/horse_saddle_compressed.obj \ 
+python generate_texture.py --input_mesh ./load/examples/horse_saddle_compressed.obj \
                            --output ./output/horse_saddle/ \
                            --prompt "horse saddle, leather, craft, sewing, tanning, 20-th century, best quality, hd" \
                            --rotation_y 180 \
 ```
 
 Explanation for some primary parameters:
+
 - `input_mesh`: We currently support `.obj` and `.glb` files. We provide several samples in `load/examples`.
 - `output`: The directory to save output. The script will automatically create non-exisiting ones.
 - `prompt`: Input text prompt. We also support additional `a_prompt` and negative prompts `n_prompt`.
@@ -59,7 +61,7 @@ Please refer to `generate_texture.py` for other parameters. The script will expo
 
 ### Inference with LightControlNet
 
-We have uploaded our pre-trained lightcontrolnet weights to huggingface at [link](https://huggingface.co/kangled/lightcontrolnet/). With the `controlnet_name` specified as `kangled/lightcontrolnet`, the scripts will automatically download the weights. 
+We have uploaded our pre-trained lightcontrolnet weights to huggingface at [link](https://huggingface.co/kangled/lightcontrolnet/). With the `controlnet_name` specified as `kangled/lightcontrolnet`, the scripts will automatically download the weights.
 
 #### 2D Generation with LightControlNet
 
@@ -69,14 +71,14 @@ You can run the script below to run LightControlNet on a prepared control image,
 python tools/test_controlnet.py
 ```
 
-| Input Control Image | "Leather" | "Wooden"  | "Steel" |
-| --- | --- | --- | --- |
-| <img src="load/examples/material_ball/011_cond.png" width="256"/> | <img src="assets/lightcontrolnet/lightcontrolnet_000_out.png" width="256"/> | <img src="assets/lightcontrolnet/lightcontrolnet_001_out.png" width="256"/> | <img src="assets/lightcontrolnet/lightcontrolnet_002_out.png" width="256"/>
+| Input Control Image                                               | "Leather"                                                                   | "Wooden"                                                                    | "Steel"                                                                     |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| <img src="load/examples/material_ball/011_cond.png" width="256"/> | <img src="assets/lightcontrolnet/lightcontrolnet_000_out.png" width="256"/> | <img src="assets/lightcontrolnet/lightcontrolnet_001_out.png" width="256"/> | <img src="assets/lightcontrolnet/lightcontrolnet_002_out.png" width="256"/> |
 
 #### Run texture generation with pre-trained lightcontrolnet
 
 ```
-python generate_texture.py --input_mesh ./load/examples/horse_saddle_compressed.obj \ 
+python generate_texture.py --input_mesh ./load/examples/horse_saddle_compressed.obj \
                            --output ./output/horse_saddle_pbr/ \
                            --prompt "horse saddle, leather, craft, sewing, tanning, 20-th century, best quality, hd" \
                            --rotation_y 180 \
@@ -96,10 +98,10 @@ Left: Rotating Object with the fixed lighting. Right: Fixed Object with the rota
 
 You can also train your own LightControlNet with your own prepared data. We provide the instructions below.
 
-
 #### Install Blender
 
 You first need to download and Install Blender:
+
 ```
 wget https://download.blender.org/release/Blender3.2/blender-3.2.2-linux-x64.tar.xz
 tar -xf blender-3.2.2-linux-x64.tar.xz
@@ -110,6 +112,7 @@ export PATH=$PATH:path_to_blender/blender-3.2.2-linux-x64/
 #### Render training data
 
 To render control images for a single object, we provide a blender script and example usage below:
+
 ```
 blender -b -P tools/blender_script.py -- \
             --object_path {obj_path} \
@@ -126,13 +129,14 @@ Once the images are rendered, the dataset can be built by running `tools/make_co
 After running the script, copy `tools/objaverse_render.py` to your data root dir to make it a readable dataset. Please change the corresponding data and rendering directory accordingly.
 
 Example file tree:
+
 ```
 rendered_data
 ├── staffpicked
 │   ├── 00200996b8f34f55a2dd2f44d316d107 # Rendered Object
 │   │   ├── 000_rgb.png
 │   │   └── ...
-│   ├── ...        
+│   ├── ...
 │   └── train.jsonl
 ├── subsetB
 │   └── ...
@@ -164,33 +168,34 @@ accelerate launch train_controlnet.py \
 
 ## FAQs
 
-***Q1***: *I'm not getting good results.*
+**_Q1_**: _I'm not getting good results._
 
 Make sure you follow the guidelines and walk through the questions below. In general, results with depth ControlNet are visually better than lightcontrolnet as the depth one is trained on much more data.
 
-***Q2***: *Baked-in lighting still exists in generated albedo.*
+**_Q2_**: _Baked-in lighting still exists in generated albedo._
 
 Our method is trained without PBR data. It is difficult to recover perfect PBR materials without data priors. Sometimes tuning down `lambda_recon_reg` can alleviate this problem.
 
-***Q3***: *Why do the generated visuals look different from yours on the website?*
+**_Q3_**: _Why do the generated visuals look different from yours on the website?_
 
-Some of our videos on our website are rendered using Blender. You can import the generated texture into Blender using its built-in function.
+Some of our videos on our website are rendered using Blender. You can import the generated texture into Blender using its built-in function. Please refer to [Blender-render-toolkit](https://github.com/dunbar12138/blender-render-toolkit/).
 
-***Q4***: *I'm getting over-saturated color.*
+**_Q4_**: _I'm getting over-saturated color._
 
 Using a larger `lambda_recon_reg` or a smaller `guidance_scale` can help.
 
-***Q5***: *The running time is longer than expected.*
+**_Q5_**: _The running time is longer than expected._
 
 The initial run takes significantly longer as it requires downloading pre-trained weights and compiling certain components. Once completed, subsequent runs will execute at normal speed. Additionally, generating intermediate outputs, such as videos, adds to the processing time. To speed up the process, you can use the `--production` flag to disable these intermediate outputs and only generate the final result. Additionally, the running time is also dependent on the size of the input mesh as meshes with more vertices and faces require longer time to load, render, and export.
 
-***Q6***: *There is an external package `threestudio`. Is it different from [threestudio](https://github.com/threestudio-project/threestudio)?*
+**_Q6_**: _There is an external package `threestudio`. Is it different from [threestudio](https://github.com/threestudio-project/threestudio)?_
 
 Yes. While our codebase is heavily based on threestudio, we did make a few changes within the package, e.g., add customized environment lighting support in PBR materials.
 
 ## Citation
 
 If you find this repository useful for your research, please cite the following work.
+
 ```
 @inproceedings{deng2024flashtex,
   title={FlashTex: Fast Relightable Mesh Texturing with LightControlNet},
@@ -200,8 +205,8 @@ If you find this repository useful for your research, please cite the following 
 }
 ```
 
-
 ## Acknowledgments
-We thank Benjamin Akrish, Victor Zordan, Dmitry Trifonov, Derek Liu, Sheng-Yu Wang, Gaurav Parmer, Ruihan Gao, Nupur Kumari, and Sean Liu for their discussion and help. This work was done when Kangle was an intern at Roblox. The project is partly supported by Roblox. JYZ is partly supported by the Packard Fellowship. KD is supported by the Microsoft Research PhD Fellowship. 
+
+We thank Benjamin Akrish, Victor Zordan, Dmitry Trifonov, Derek Liu, Sheng-Yu Wang, Gaurav Parmer, Ruihan Gao, Nupur Kumari, and Sean Liu for their discussion and help. This work was done when Kangle was an intern at Roblox. The project is partly supported by Roblox. JYZ is partly supported by the Packard Fellowship. KD is supported by the Microsoft Research PhD Fellowship.
 
 Part of this codebase borrows from [threestudio](https://github.com/threestudio-project/threestudio), [stable-dreamfusion](https://github.com/ashawkey/stable-dreamfusion), and [objaverse](https://github.com/allenai/objaverse-xl/tree/main/scripts/rendering).
