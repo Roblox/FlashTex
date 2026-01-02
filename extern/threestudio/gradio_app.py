@@ -207,22 +207,28 @@ def run(
 
     # spawn the training process
     gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "0")
-    process = subprocess.Popen(
-        f"python launch.py --config {config_file.name} --train --gpu {gpu} --gradio trainer.enable_progress_bar=false".split()
-        + [
-            f'name="{name}"',
-            f'tag="{tag}"',
-            f"exp_root_dir={os.path.join(save_root, EXP_ROOT_DIR)}",
-            "use_timestamp=false",
-            f'system.prompt_processor.prompt="{prompt}"',
-            f"system.guidance.guidance_scale={guidance_scale}",
-            f"seed={seed}",
-            f"trainer.max_steps={max_steps}",
-        ]
-        + (
-            ["checkpoint.every_n_train_steps=${trainer.max_steps}"] if save_ckpt else []
-        ),
-    )
+    cmd = [
+        "python",
+        "launch.py",
+        "--config",
+        config_file.name,
+        "--train",
+        "--gpu",
+        gpu,
+        "--gradio",
+        "trainer.enable_progress_bar=false",
+        f"name={name}",
+        f"tag={tag}",
+        f"exp_root_dir={os.path.join(save_root, EXP_ROOT_DIR)}",
+        "use_timestamp=false",
+        f"system.prompt_processor.prompt={prompt}",
+        f"system.guidance.guidance_scale={guidance_scale}",
+        f"seed={seed}",
+        f"trainer.max_steps={max_steps}",
+    ]
+    if save_ckpt:
+        cmd.append("checkpoint.every_n_train_steps=${trainer.max_steps}")
+    process = subprocess.Popen(cmd)
 
     # spawn the watcher process
     watch_process = subprocess.Popen(
