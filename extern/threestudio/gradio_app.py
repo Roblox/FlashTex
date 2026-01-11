@@ -9,6 +9,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
+from pathlib import Path
 
 import gradio as gr
 import numpy as np
@@ -202,7 +203,19 @@ def run(
     # manually assign the output directory, name and tag so that we know the trial directory
     name = os.path.basename(model_config[model_name]["path"]).split(".")[0]
     tag = datetime.now().strftime("@%Y%m%d-%H%M%S")
-    trial_dir = os.path.join(save_root, EXP_ROOT_DIR, name, tag)
+
+    # normalize and validate save_root to avoid using unexpected directories
+    base_root = (Path.cwd() / EXP_ROOT_DIR).resolve()
+    try:
+        candidate_root = Path(save_root).expanduser().resolve()
+        # ensure the requested root stays within the base_root
+        _ = candidate_root.relative_to(base_root)
+        safe_save_root = candidate_root
+    except Exception:
+        # fall back to the default base_root on invalid or unsafe input
+        safe_save_root = base_root
+
+    trial_dir = os.path.join(str(safe_save_root), name, tag)
     alive_path = os.path.join(trial_dir, "alive")
 
     # spawn the training process
@@ -212,7 +225,7 @@ def run(
         + [
             f'name="{name}"',
             f'tag="{tag}"',
-            f"exp_root_dir={os.path.join(save_root, EXP_ROOT_DIR)}",
+            f"exp_root_dir={str(safe_save_root)}",
             "use_timestamp=false",
             f'system.prompt_processor.prompt="{prompt}"',
             f"system.guidance.guidance_scale={guidance_scale}",
